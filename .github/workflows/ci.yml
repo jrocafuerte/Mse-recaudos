@@ -126,7 +126,7 @@ jobs:
     permissions: { contents: read, security-events: write }
     steps:
       - uses: actions/checkout@v4
-      - uses: hadolint/hadolint-action@v3.1.0
+      - uses: hadolint/hadolint-action@v3.5.0
         with: { dockerfile: Dockerfile, failure-threshold: warning }
       - run: docker build -t ${{ github.event.repository.name }}:${{ github.sha }} .
       - uses: aquasecurity/trivy-action@0.28.0
