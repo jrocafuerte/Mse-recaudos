@@ -1,0 +1,36 @@
+# Reglas SAST propias del dominio (complementan los rulesets de la comunidad).
+rules:
+  - id: no-log-sensitive-fields
+    message: No registrar contraseñas, OTP, tokens ni PAN en logs (PCI DSS 3.4 / 10.x)
+    severity: ERROR
+    languages: [typescript]
+    patterns:
+      - pattern-either:
+          - pattern: $LOGGER.$M(..., <... $X.password ...>, ...)
+          - pattern: $LOGGER.$M(..., <... $X.otp ...>, ...)
+          - pattern: $LOGGER.$M(..., <... $X.refreshToken ...>, ...)
+          - pattern: $LOGGER.$M(..., <... $X.accessToken ...>, ...)
+          - pattern: $LOGGER.$M(..., <... $X.pan ...>, ...)
+      - metavariable-regex:
+          metavariable: $M
+          regex: ^(log|warn|error|debug|verbose|info)$
+
+  - id: jwt-verify-without-algorithms
+    message: jwtVerify debe restringir `algorithms` (evita alg confusion / alg=none)
+    severity: ERROR
+    languages: [typescript]
+    patterns:
+      - pattern: jwtVerify($T, $K, {...})
+      - pattern-not: 'jwtVerify($T, $K, {..., algorithms: $A, ...})'
+
+  - id: controller-body-without-schema
+    message: Todo @Body() debe validarse con un schema Zod (`@Body({ schema })`)
+    severity: WARNING
+    languages: [typescript]
+    pattern: '@Body() $P'
+
+  - id: math-random-in-security-code
+    message: Usar crypto.randomUUID / randomBytes / randomInt para valores de seguridad
+    severity: ERROR
+    languages: [typescript]
+    pattern: Math.random()

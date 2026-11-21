@@ -1,0 +1,40 @@
+# DAST con OWASP ZAP guiado por openapi.yaml.
+# - En PR: escaneo de la API sin sesión (verifica que TODO exige sesión, headers, errores, inyecciones).
+# - Nightly en QA: escaneo autenticado de extremo a extremo (app → mse-banca-movil → handoff → este BFF),
+#   ejecutado desde el pipeline de integración con un usuario sintético (ver docs/SECURITY.md).
+name: DAST
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '27 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  zap-api-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Levantar el BFF
+        run: |
+          docker build -t bff:dast .
+          docker run -d --name bff -p 3001:3001 -e NODE_ENV=development bff:dast
+          for i in $(seq 1 30); do curl -sf http://localhost:3001/health && break; sleep 2; done
+      - name: OWASP ZAP API scan
+        run: |
+          mkdir -p reports && chmod 777 reports
+          docker run --rm --network host -v "$PWD":/zap/wrk:rw ghcr.io/zaproxy/zaproxy:stable \
+            zap-api-scan.py -t /zap/wrk/openapi.yaml -f openapi -O http://localhost:3001 \
+            -c /zap/wrk/.zap/rules.tsv -r reports/zap.html -J reports/zap.json -I
+      - name: Fallar si hay alertas High
+        run: |
+          HIGH=$(jq '[.site[].alerts[] | select(.riskcode=="3")] | length' reports/zap.json)
+          echo "Alertas High: $HIGH"
+          test "$HIGH" -eq 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: zap-report, path: reports/ }

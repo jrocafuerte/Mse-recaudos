@@ -1,0 +1,99 @@
+openapi: 3.1.0
+info:
+  title: mse-recaudos (BFF del micro frontend de Pago de Servicios)
+  version: 1.0.0
+  description: |
+    Solo es invocado por el servidor Next de spa-recaudos (red privada). La sesión
+    viaja en `X-Recaudos-Session`; los métodos que cambian estado exigen
+    `X-Requested-With: recaudos-spa` y un `Origin` permitido.
+servers:
+  - url: http://localhost:3001
+security:
+  - session: []
+components:
+  securitySchemes:
+    session: { type: apiKey, in: header, name: X-Recaudos-Session }
+  parameters:
+    Csrf: { name: X-Requested-With, in: header, required: true, schema: { type: string, enum: [recaudos-spa] } }
+    IdempotencyKey: { name: Idempotency-Key, in: header, required: true, schema: { type: string, format: uuid } }
+  responses:
+    Problem:
+      description: Error (RFC 9457)
+      content:
+        application/problem+json:
+          schema: { type: object, properties: { status: { type: integer }, detail: { type: string }, requestId: { type: string } } }
+paths:
+  /health:
+    get: { security: [], responses: { '200': { description: OK } } }
+  /v1/session/exchange:
+    post:
+      security: []
+      summary: Canje servidor-a-servidor del handoff token por una sesión del micro frontend
+      parameters: [{ name: X-Internal-Client-Secret, in: header, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [handoffToken], properties: { handoffToken: { type: string } } }
+      responses: { '200': { description: sessionToken }, '401': { $ref: '#/components/responses/Problem' } }
+  /v1/session:
+    delete:
+      parameters: [{ $ref: '#/components/parameters/Csrf' }]
+      responses: { '204': { description: Sesión destruida } }
+  /v1/categories:
+    get: { responses: { '200': { description: Categorías }, '401': { $ref: '#/components/responses/Problem' } } }
+  /v1/billers:
+    get:
+      parameters:
+        - { name: category, in: query, schema: { type: string, pattern: '^[a-z]{2,20}$' } }
+        - { name: q, in: query, schema: { type: string, maxLength: 40 } }
+      responses: { '200': { description: Empresas } }
+  /v1/billers/{id}:
+    get:
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, pattern: '^blr-\d{3}$' } }]
+      responses: { '200': { description: Empresa }, '404': { $ref: '#/components/responses/Problem' } }
+  /v1/billers/{id}/debts:
+    post:
+      parameters:
+        - { $ref: '#/components/parameters/Csrf' }
+        - { name: id, in: path, required: true, schema: { type: string, pattern: '^blr-\d{3}$' } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [reference], properties: { reference: { type: string, pattern: '^[A-Za-z0-9]{4,20}$' } } }
+      responses: { '200': { description: Deudas }, '422': { $ref: '#/components/responses/Problem' } }
+  /v1/source-accounts:
+    get: { responses: { '200': { description: Cuentas de cargo del cliente } } }
+  /v1/payment-intents:
+    post:
+      summary: Fija monto/cuenta y devuelve el hash canónico de la operación
+      parameters: [{ $ref: '#/components/parameters/Csrf' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [billerId, reference, debtId, sourceAccountId]
+              properties: { billerId: { type: string }, reference: { type: string }, debtId: { type: string }, sourceAccountId: { type: string } }
+      responses: { '201': { description: Intent creado } }
+  /v1/payments:
+    post:
+      summary: Ejecuta el pago con step-up token ligado al intent
+      parameters: [{ $ref: '#/components/parameters/Csrf' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [intentId, stepUpToken]
+              properties: { intentId: { type: string, format: uuid }, stepUpToken: { type: string } }
+      responses: { '201': { description: Comprobante }, '403': { $ref: '#/components/responses/Problem' } }
+  /v1/payments/{id}:
+    get:
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: Comprobante }, '404': { $ref: '#/components/responses/Problem' } }

@@ -1,0 +1,8 @@
+10049	IGNORE	(Non-Storable Content: es intencional, Cache-Control: no-store en todas las respuestas)
+10021	FAIL	(X-Content-Type-Options faltante)
+10035	FAIL	(Strict-Transport-Security faltante)
+10038	FAIL	(Content Security Policy faltante)
+40018	FAIL	(SQL Injection)
+40012	FAIL	(XSS reflejado)
+90019	FAIL	(Server Side Include)
+90020	FAIL	(Remote OS Command Injection)
